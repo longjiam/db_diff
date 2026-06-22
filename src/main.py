@@ -57,8 +57,8 @@ class ExecuteSQLWorker(QThread):
             
             self.progress.emit(30, "开始执行 SQL...")
             
-            # 分割SQL语句（按分号分割）
-            statements = [s.strip() for s in self.sql.split(';') if s.strip() and not s.strip().startswith('--')]
+            # 使用更智能的SQL分割方法，处理字符串内的分号和引号
+            statements = self._split_sql_statements(self.sql)
             
             total = len(statements)
             for i, stmt in enumerate(statements, 1):
@@ -78,6 +78,90 @@ class ExecuteSQLWorker(QThread):
             
         except Exception as e:
             self.error.emit(f"执行SQL时发生错误: {str(e)}")
+    
+    def _split_sql_statements(self, sql: str) -> list[str]:
+        """智能分割SQL语句，正确处理字符串内的分号、引号和注释
+        
+        Args:
+            sql: 完整的SQL脚本
+            
+        Returns:
+            SQL语句列表
+        """
+        statements = []
+        current_stmt = []
+        in_single_quote = False
+        in_double_quote = False
+        escaped = False
+        in_line_comment = False
+        
+        i = 0
+        while i < len(sql):
+            char = sql[i]
+            
+            # 检测行注释开始 (--)
+            if not in_single_quote and not in_double_quote and char == '-' and i + 1 < len(sql) and sql[i+1] == '-':
+                in_line_comment = True
+                current_stmt.append(char)
+                current_stmt.append(sql[i+1])
+                i += 2
+                continue
+            
+            # 行注释在换行处结束
+            if in_line_comment:
+                current_stmt.append(char)
+                if char == '\n':
+                    in_line_comment = False
+                i += 1
+                continue
+            
+            if escaped:
+                current_stmt.append(char)
+                escaped = False
+                i += 1
+                continue
+            
+            if char == '\\':
+                escaped = True
+                current_stmt.append(char)
+                i += 1
+                continue
+            
+            if char == "'" and not in_double_quote:
+                in_single_quote = not in_single_quote
+                current_stmt.append(char)
+                i += 1
+                continue
+            
+            if char == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+                current_stmt.append(char)
+                i += 1
+                continue
+            
+            if char == ';' and not in_single_quote and not in_double_quote:
+                stmt = ''.join(current_stmt).strip()
+                # 移除注释行，只保留实际SQL
+                lines = [line for line in stmt.split('\n') if not line.strip().startswith('--')]
+                clean_stmt = '\n'.join(lines).strip()
+                if clean_stmt:
+                    statements.append(clean_stmt)
+                current_stmt = []
+                i += 1
+                continue
+            
+            current_stmt.append(char)
+            i += 1
+        
+        # 处理最后一条语句（如果没有分号结尾）
+        if current_stmt:
+            stmt = ''.join(current_stmt).strip()
+            lines = [line for line in stmt.split('\n') if not line.strip().startswith('--')]
+            clean_stmt = '\n'.join(lines).strip()
+            if clean_stmt:
+                statements.append(clean_stmt)
+        
+        return statements
 
 
 class DiffWorker(QThread):

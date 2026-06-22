@@ -59,11 +59,17 @@ class PostgreSQLAdapter(BaseDBAdapter):
         
         columns = []
         for row in result.fetchall():
-            col_type = row[1]
+            col_type = row[1]  # data_type
+            
+            # 处理字符类型长度
             if row[2] is not None:
                 col_type = f"{row[1]}({row[2]})"
+            # PostgreSQL 不需要 numeric 精度（BIGINT, INTEGER 等是固定宽度）
+            # 只有 NUMERIC 和 DECIMAL 类型才需要精度参数
             elif row[5] is not None and row[6] is not None:
-                col_type = f"{row[1]}({row[5]},{row[6]})"
+                if row[1].upper() in ('NUMERIC', 'DECIMAL', 'DEC'):
+                    col_type = f"{row[1]}({row[5]},{row[6]})"
+                # 其他类型（BIGINT, INTEGER, SMALLINT 等）不需要精度
             
             columns.append({
                 "name": row[0],
@@ -158,12 +164,14 @@ class PostgreSQLAdapter(BaseDBAdapter):
                 default_val = col['default']
                 # 处理字符串默认值
                 if not default_val.startswith("'") and not default_val.upper() in ('NULL', 'TRUE', 'FALSE', 'CURRENT_TIMESTAMP', 'NOW()'):
-                    default_val = f"'{default_val}'"
+                    # 转义单引号，防止 SQL 注入和语法错误
+                    escaped_default = default_val.replace("'", "''")
+                    default_val = f"'{escaped_default}'"
                 col_def += f" DEFAULT {default_val}"
             if col.get("auto_increment"):
                 col_def = f"  \"{col['name']}\" SERIAL"
-            if col.get("comment"):
-                col_def += f" -- {col['comment']}"
+            # PostgreSQL CREATE TABLE 中不能有列内注释（-- comment）
+            # 注释必须用 COMMENT ON COLUMN 语句单独添加
             parts.append(col_def)
         
         # 主键
@@ -173,12 +181,16 @@ class PostgreSQLAdapter(BaseDBAdapter):
         
         sql = f"CREATE TABLE \"{table}\" (\n{',\n'.join(parts)}\n)"
         if table_comment:
-            sql += f";\nCOMMENT ON TABLE \"{table}\" IS '{table_comment}'"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_table_comment = table_comment.replace("'", "''")
+            sql += f";\nCOMMENT ON TABLE \"{table}\" IS '{escaped_table_comment}'"
         
         # 添加字段注释
         for col in columns:
             if col.get("comment"):
-                sql += f";\nCOMMENT ON COLUMN \"{table}\".\"{col['name']}\" IS '{col['comment']}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_comment = col['comment'].replace("'", "''")
+                sql += f";\nCOMMENT ON COLUMN \"{table}\".\"{col['name']}\" IS '{escaped_comment}'"
         
         return sql + ";"
     
@@ -189,11 +201,15 @@ class PostgreSQLAdapter(BaseDBAdapter):
         if column.get("default") is not None:
             default_val = column['default']
             if not default_val.startswith("'") and not default_val.upper() in ('NULL', 'TRUE', 'FALSE', 'CURRENT_TIMESTAMP', 'NOW()'):
-                default_val = f"'{default_val}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_default = default_val.replace("'", "''")
+                default_val = f"'{escaped_default}'"
             col_def += f" DEFAULT {default_val}"
         sql = f"ALTER TABLE \"{table}\" ADD COLUMN {col_def};"
         if column.get("comment"):
-            sql += f"\nCOMMENT ON COLUMN \"{table}\".\"{column['name']}\" IS '{column['comment']}';"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_comment = column['comment'].replace("'", "''")
+            sql += f"\nCOMMENT ON COLUMN \"{table}\".\"{column['name']}\" IS '{escaped_comment}';"
         return sql
     
     def generate_modify_column_sql(self, table: str, old_column: dict, new_column: dict) -> str:
@@ -203,11 +219,15 @@ class PostgreSQLAdapter(BaseDBAdapter):
         if new_column.get("default") is not None:
             default_val = new_column['default']
             if not default_val.startswith("'") and not default_val.upper() in ('NULL', 'TRUE', 'FALSE', 'CURRENT_TIMESTAMP', 'NOW()'):
-                default_val = f"'{default_val}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_default = default_val.replace("'", "''")
+                default_val = f"'{escaped_default}'"
             col_def += f" DEFAULT {default_val}"
         sql = f"ALTER TABLE \"{table}\" ALTER COLUMN \"{new_column['name']}\" TYPE {new_column['type']} USING \"{new_column['name']}\"::{new_column['type'].split('(')[0]};"
         if new_column.get("comment"):
-            sql += f"\nCOMMENT ON COLUMN \"{table}\".\"{new_column['name']}\" IS '{new_column['comment']}';"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_comment = new_column['comment'].replace("'", "''")
+            sql += f"\nCOMMENT ON COLUMN \"{table}\".\"{new_column['name']}\" IS '{escaped_comment}';"
         return sql
     
     def generate_drop_column_sql(self, table: str, column_name: str) -> str:

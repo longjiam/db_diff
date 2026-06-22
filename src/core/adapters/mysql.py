@@ -163,11 +163,15 @@ class MySQLAdapter(BaseDBAdapter):
                 if default_val.upper() in ('CURRENT_TIMESTAMP', 'NULL'):
                     col_def += f" DEFAULT {default_val}"
                 else:
-                    col_def += f" DEFAULT '{default_val}'"
+                    # 转义单引号，防止 SQL 注入和语法错误
+                    escaped_default = default_val.replace("'", "''")
+                    col_def += f" DEFAULT '{escaped_default}'"
             if col.get("auto_increment"):
                 col_def += " AUTO_INCREMENT"
             if col.get("comment"):
-                col_def += f" COMMENT '{col['comment']}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_comment = col['comment'].replace("'", "''")
+                col_def += f" COMMENT '{escaped_comment}'"
             parts.append(col_def)
         
         pk_cols = [c["name"] for c in columns if c.get("is_primary")]
@@ -197,7 +201,9 @@ class MySQLAdapter(BaseDBAdapter):
         cols = ",\n".join(parts)
         sql = f"CREATE TABLE `{table}` (\n{cols}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         if table_comment:
-            sql += f" COMMENT='{table_comment}'"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_table_comment = table_comment.replace("'", "''")
+            sql += f" COMMENT='{escaped_table_comment}'"
         sql += ";"
         return sql
     
@@ -210,9 +216,13 @@ class MySQLAdapter(BaseDBAdapter):
             if default_val.upper() in ('CURRENT_TIMESTAMP', 'NULL'):
                 col_def += f" DEFAULT {default_val}"
             else:
-                col_def += f" DEFAULT '{default_val}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_default = default_val.replace("'", "''")
+                col_def += f" DEFAULT '{escaped_default}'"
         if column.get("comment"):
-            col_def += f" COMMENT '{column['comment']}'"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_comment = column['comment'].replace("'", "''")
+            col_def += f" COMMENT '{escaped_comment}'"
         return f"ALTER TABLE `{table}` ADD COLUMN {col_def};"
     
     def generate_modify_column_sql(self, table: str, old_column: dict, new_column: dict) -> str:
@@ -224,9 +234,13 @@ class MySQLAdapter(BaseDBAdapter):
             if default_val.upper() in ('CURRENT_TIMESTAMP', 'NULL'):
                 col_def += f" DEFAULT {default_val}"
             else:
-                col_def += f" DEFAULT '{default_val}'"
+                # 转义单引号，防止 SQL 注入和语法错误
+                escaped_default = default_val.replace("'", "''")
+                col_def += f" DEFAULT '{escaped_default}'"
         if new_column.get("comment"):
-            col_def += f" COMMENT '{new_column['comment']}'"
+            # 转义单引号，防止 SQL 注入和语法错误
+            escaped_comment = new_column['comment'].replace("'", "''")
+            col_def += f" COMMENT '{escaped_comment}'"
         return f"ALTER TABLE `{table}` MODIFY COLUMN {col_def};"
     
     def generate_drop_column_sql(self, table: str, column_name: str) -> str:
